@@ -16,158 +16,20 @@ from typing import List
 
 class CryptoScheme:
     """
-    Classe que implementa esquema criptográfico simplificado.
+    Classe auxiliar que implementa operações criptográficas de baixo nível.
     
     Características:
-    - Geração de chave baseada em SHA-256
-    - Criptografia com múltiplas camadas (XOR, S-Box, P-Box)
-    - Descriptografia reversível
+    - S-Box e P-Box para transformações não-lineares
+    - Derivação de subchaves
+    - Operações de blocos
     """
     
     def __init__(self):
         """Inicializa o esquema criptográfico."""
-        self.BLOCK_SIZE = None # Tamanho do bloco em bits
+        self.BLOCK_SIZE = None  # Tamanho do bloco em bits
         self.NUM_ROUNDS = 12  # Número de rodadas de transformação
-        self.pbox = None
+        self.pboxes = None
         
-    def GEN(self, seed: List[int]) -> List[int]:
-        """
-        Gera chave binária a partir de uma semente usando expansão SHA-256.
-        
-        Args:
-            seed: Lista de inteiros (0 ou 1) representando a semente
-            
-        Returns:
-            Lista de inteiros (0 ou 1) com tamanho 4 * len(seed)
-            
-        Raises:
-            ValueError: Se seed não for válida (não binária ou vazia)
-            
-        Example:
-            >>> crypto = CryptoScheme()
-            >>> seed = [1, 0, 1, 1, 0, 1, 0, 1]
-            >>> key = crypto.GEN(seed)
-            >>> len(key) == 4 * len(seed)
-            True
-        """
-        # Validação de entrada
-        if not seed or len(seed) == 0:
-            raise ValueError("Seed não pode ser vazia")
-        if not all(bit in [0, 1] for bit in seed):
-            raise ValueError("Seed deve conter apenas 0's e 1's")
-        
-        # Converter seed para bytes
-        seed_bytes = self._bits_to_bytes(seed)
-        
-        # Expandir usando SHA-256
-        key_bits = []
-        target_len = 4 * len(seed)
-        counter = 0
-        
-        while len(key_bits) < target_len:
-            # Concatenar seed com contador para gerar blocos diferentes
-            h = hashlib.sha256(seed_bytes + counter.to_bytes(4, 'big'))
-            digest = h.digest()
-            
-            # Extrair bits do digest
-            for byte in digest:
-                for i in range(8):
-                    if len(key_bits) < target_len:
-                        key_bits.append((byte >> (7 - i)) & 1)
-                    else:
-                        break
-                if len(key_bits) >= target_len:
-                    break
-            
-            counter += 1
-        
-        # print("Dentro do gerador da chave")
-        return key_bits[:target_len]
-    
-    def ENC(self, K: List[int], M: List[int]) -> List[int]:
-        """
-        Criptografa mensagem usando chave com múltiplas camadas de transformação.
-        
-        Args:
-            K: Chave binária (tamanho 4 * len(seed))
-            M: Mensagem binária (tamanho 4 * len(seed))
-            
-        Returns:
-            Cifra binária (mesmo tamanho de M)
-            
-        Raises:
-            ValueError: Se entradas não forem válidas ou tamanhos incompatíveis
-        """
-        # Validação de entrada
-        self._validate_binary_list(K, "Chave")
-        self._validate_binary_list(M, "Mensagem")
-        self.BLOCK_SIZE = len(M)
-        self._generate_pboxes()
-        blocks = [M]  # um único bloco global
-
-        
-        if len(K) != len(M):
-            raise ValueError(f"Chave e mensagem devem ter mesmo tamanho. K={len(K)}, M={len(M)}")
-        
-        # Derivar subchaves
-        subkeys = self._derive_subkeys(K, self.NUM_ROUNDS)
-        
-        # Dividir mensagem em blocos
-        blocks = self._split_into_blocks(M, self.BLOCK_SIZE)
-        encrypted_blocks = []
-        
-        # Processar cada bloco
-        for block in blocks:
-            encrypted_block = self._encrypt_block(block, subkeys)
-            encrypted_blocks.extend(encrypted_block)
-        
-
-        # print("Dentro do ENC")
-        # print("Chave ENC",K)
-        # print("Mensagem",M)
-        # print("Cifra",encrypted_blocks)
-        return encrypted_blocks
-    
-    def DEC(self, K: List[int], C: List[int]) -> List[int]:
-        """
-        Descriptografa cifra usando chave (operação reversa de ENC).
-        
-        Args:
-            K: Chave binária (tamanho 4 * len(seed))
-            C: Cifra binária (tamanho 4 * len(seed))
-            
-        Returns:
-            Mensagem original binária
-            
-        Raises:
-            ValueError: Se entradas não forem válidas ou tamanhos incompatíveis
-        """
-        # Validação de entrada
-        self._validate_binary_list(K, "Chave")
-        self._validate_binary_list(C, "Cifra")
-        
-        if len(K) != len(C):
-            raise ValueError(f"Chave e cifra devem ter mesmo tamanho. K={len(K)}, C={len(C)}")
-        
-        # Derivar subchaves (mesmas da criptografia)
-        subkeys = self._derive_subkeys(K, self.NUM_ROUNDS)
-        
-        # Dividir cifra em blocos
-        blocks = self._split_into_blocks(C, self.BLOCK_SIZE)
-        decrypted_blocks = []
-        
-        # Processar cada bloco (ordem reversa das transformações)
-        for block in blocks:
-            decrypted_block = self._decrypt_block(block, subkeys)
-            decrypted_blocks.extend(decrypted_block)
-        
-
-        # print("Dentro do DEC")
-        # print("Chave ENC",K)
-        # print("Cifra",C)
-        # print("Mensagem",decrypted_blocks)
-        return decrypted_blocks
-    
     # ==================== Funções Auxiliares ====================
     
     def _bits_to_bytes(self, bits: List[int]) -> bytes:
@@ -248,7 +110,6 @@ class CryptoScheme:
             subkeys.append(subkey[:len(key)])
         
         return subkeys
-
     
     def _encrypt_block(self, block: List[int], subkeys: List[List[int]]) -> List[int]:
         """
@@ -273,7 +134,7 @@ class CryptoScheme:
             
             # P-Box (permutação)
             current_block = self._apply_pbox(current_block, round_num)
-            # current_block = self._mix_layer(current_block)
+        
         return current_block
     
     def _decrypt_block(self, block: List[int], subkeys: List[List[int]]) -> List[int]:
@@ -292,7 +153,6 @@ class CryptoScheme:
         # Aplicar transformações na ordem reversa
         for round_num in range(self.NUM_ROUNDS - 1, -1, -1):
             # P-Box inversa
-            # current_block = self._mix_layer_inverse(current_block)
             current_block = self._apply_pbox_inverse(current_block, round_num)
             
             # S-Box inversa
@@ -382,99 +242,202 @@ class CryptoScheme:
             result.extend(output_bits)
         
         return result[:len(block)]
-    
-    # def _apply_pbox(self, block: List[int], round_num: int) -> List[int]:
-    #     """
-    #     Aplica P-Box (permutação) ao bloco.
-        
-    #     Args:
-    #         block: Bloco de bits
-    #         round_num: Número da rodada (influencia permutação)
-            
-    #     Returns:
-    #         Bloco permutado
-    #     """
-    #     n = len(block)
-    #     result = [0] * n
-        
-    #     # Permutação baseada em função determinística
-    #     for i in range(n):
-    #         # Calcular nova posição usando função baseada em round_num
-    #         new_pos = (i * (round_num + 3) + round_num * 7) % n
-    #         result[new_pos] = block[i]
-        
-    #     return result
 
     def _generate_pboxes(self):
+        """Gera as P-Boxes para todas as rodadas."""
         self.pboxes = []
         for r in range(self.NUM_ROUNDS):
             p = list(range(self.BLOCK_SIZE))
             random.Random(r).shuffle(p)
             self.pboxes.append(p)
 
-
-    def _apply_pbox(self, block, round_num):
+    def _apply_pbox(self, block: List[int], round_num: int) -> List[int]:
+        """
+        Aplica P-Box (permutação) ao bloco.
+        
+        Args:
+            block: Bloco de bits
+            round_num: Número da rodada
+            
+        Returns:
+            Bloco permutado
+        """
         pbox = self.pboxes[round_num]
         return [block[i] for i in pbox]
     
-    # def _apply_pbox_inverse(self, block: List[int], round_num: int) -> List[int]:
-    #     """
-    #     Aplica P-Box inversa ao bloco.
+    def _apply_pbox_inverse(self, block: List[int], round_num: int) -> List[int]:
+        """
+        Aplica P-Box inversa ao bloco.
         
-    #     Reverte a permutação aplicada por _apply_pbox.
-    #     """
-    #     n = len(block)
-    #     result = [0] * n
-        
-    #     # Reverter permutação
-    #     for i in range(n):
-    #         new_pos = (i * (round_num + 3) + round_num * 7) % n
-    #         result[i] = block[new_pos]
-        
-    #     return result
-    
-    def _apply_pbox_inverse(self, block, round_num):
+        Reverte a permutação aplicada por _apply_pbox.
+        """
         pbox = self.pboxes[round_num]
-        inv = [0]*len(pbox)
+        inv = [0] * len(pbox)
         for i, p in enumerate(pbox):
             inv[p] = i
         return [block[i] for i in inv]
 
-    # def test(self):
-    #     s = self._apply_sbox(block)
-    #     si = self._apply_sbox_inverse(s)
-    #     assert si == block, "S-Box não é inversível"
 
+# ==================== Funções Públicas ====================
+
+def GEN(seed: List[int]) -> List[int]:
+    """
+    Gera chave binária a partir de uma semente usando expansão SHA-256.
+    
+    Args:
+        seed: Lista de inteiros (0 ou 1) representando a semente
+        
+    Returns:
+        Lista de inteiros (0 ou 1) com tamanho 4 * len(seed)
+        
+    Raises:
+        ValueError: Se seed não for válida (não binária ou vazia)
+        
+    Example:
+        >>> seed = [1, 0, 1, 1, 0, 1, 0, 1]
+        >>> key = GEN(seed)
+        >>> len(key) == 4 * len(seed)
+        True
+    """
+    # Validação de entrada
+    if not seed or len(seed) == 0:
+        raise ValueError("Seed não pode ser vazia")
+    if not all(bit in [0, 1] for bit in seed):
+        raise ValueError("Seed deve conter apenas 0's e 1's")
+    
+    # Criar instância auxiliar para conversão
+    crypto = CryptoScheme()
+    
+    # Converter seed para bytes
+    seed_bytes = crypto._bits_to_bytes(seed)
+    
+    # Expandir usando SHA-256
+    key_bits = []
+    target_len = 4 * len(seed)
+    counter = 0
+    
+    while len(key_bits) < target_len:
+        # Concatenar seed com contador para gerar blocos diferentes
+        h = hashlib.sha256(seed_bytes + counter.to_bytes(4, 'big'))
+        digest = h.digest()
+        
+        # Extrair bits do digest
+        for byte in digest:
+            for i in range(8):
+                if len(key_bits) < target_len:
+                    key_bits.append((byte >> (7 - i)) & 1)
+                else:
+                    break
+            if len(key_bits) >= target_len:
+                break
+        
+        counter += 1
+    
+    return key_bits[:target_len]
+
+
+def ENC(K: List[int], M: List[int]) -> List[int]:
+    """
+    Criptografa mensagem usando chave com múltiplas camadas de transformação.
+    
+    Args:
+        K: Chave binária (tamanho 4 * len(seed))
+        M: Mensagem binária (tamanho 4 * len(seed))
+        
+    Returns:
+        Cifra binária (mesmo tamanho de M)
+        
+    Raises:
+        ValueError: Se entradas não forem válidas ou tamanhos incompatíveis
+    """
+    # Criar instância do esquema criptográfico
+    crypto = CryptoScheme()
+    
+    # Validação de entrada
+    crypto._validate_binary_list(K, "Chave")
+    crypto._validate_binary_list(M, "Mensagem")
+    
+    if len(K) != len(M):
+        raise ValueError(f"Chave e mensagem devem ter mesmo tamanho. K={len(K)}, M={len(M)}")
+    
+    # Configurar tamanho do bloco e gerar P-Boxes
+    crypto.BLOCK_SIZE = len(M)
+    crypto._generate_pboxes()
+    
+    # Derivar subchaves
+    subkeys = crypto._derive_subkeys(K, crypto.NUM_ROUNDS)
+    
+    # Dividir mensagem em blocos
+    blocks = crypto._split_into_blocks(M, crypto.BLOCK_SIZE)
+    encrypted_blocks = []
+    
+    # Processar cada bloco
+    for block in blocks:
+        encrypted_block = crypto._encrypt_block(block, subkeys)
+        encrypted_blocks.extend(encrypted_block)
+    
+    return encrypted_blocks
+
+
+def DEC(K: List[int], C: List[int]) -> List[int]:
+    """
+    Descriptografa cifra usando chave (operação reversa de ENC).
+    
+    Args:
+        K: Chave binária (tamanho 4 * len(seed))
+        C: Cifra binária (tamanho 4 * len(seed))
+        
+    Returns:
+        Mensagem original binária
+        
+    Raises:
+        ValueError: Se entradas não forem válidas ou tamanhos incompatíveis
+    """
+    # Criar instância do esquema criptográfico
+    crypto = CryptoScheme()
+    
+    # Validação de entrada
+    crypto._validate_binary_list(K, "Chave")
+    crypto._validate_binary_list(C, "Cifra")
+    
+    if len(K) != len(C):
+        raise ValueError(f"Chave e cifra devem ter mesmo tamanho. K={len(K)}, C={len(C)}")
+    
+    # Configurar tamanho do bloco e gerar P-Boxes (mesmo da encriptação)
+    crypto.BLOCK_SIZE = len(C)
+    crypto._generate_pboxes()
+    
+    # Derivar subchaves (mesmas da criptografia)
+    subkeys = crypto._derive_subkeys(K, crypto.NUM_ROUNDS)
+    
+    # Dividir cifra em blocos
+    blocks = crypto._split_into_blocks(C, crypto.BLOCK_SIZE)
+    decrypted_blocks = []
+    
+    # Processar cada bloco (ordem reversa das transformações)
+    for block in blocks:
+        decrypted_block = crypto._decrypt_block(block, subkeys)
+        decrypted_blocks.extend(decrypted_block)
+    
+    return decrypted_blocks
 
 
 # Exemplo de uso
 if __name__ == "__main__":
-    crypto = CryptoScheme()
-    
     # Teste básico
     seed = [1, 0, 1, 1, 0, 1, 0, 1]
     print(f"Seed: {seed}")
     
-    key = crypto.GEN(seed)
+    key = GEN(seed)
     print(f"Key length: {len(key)} (expected: {4 * len(seed)})")
     
     message = [1, 0] * (len(key) // 2)
     print(f"Message length: {len(message)}")
     
-    cipher = crypto.ENC(key, message)
+    cipher = ENC(key, message)
     print(f"Cipher length: {len(cipher)}")
     
-    decrypted = crypto.DEC(key, cipher)
+    decrypted = DEC(key, cipher)
     print(f"Decrypted length: {len(decrypted)}")
     
     print(f"Decryption correct: {message == decrypted}")
-
-    
-
-
-    # block = [0,1,1,0,1,0,0,1]
-
-    # crypto.test()
-
-
-

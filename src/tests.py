@@ -72,7 +72,7 @@ class TestRunner:
             'success_rate': (passed / iterations) * 100.0
         }
     
-    def test_performance(self, seed_size: int, iterations: int = 1000) -> Dict:
+    def test_performance(self, seed_size: int, iterations: int = 3000) -> Dict:
         """
         Mede tempo de execução das funções GEN, ENC, DEC.
         
