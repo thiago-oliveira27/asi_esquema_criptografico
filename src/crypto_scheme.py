@@ -27,7 +27,7 @@ class CryptoScheme:
     def __init__(self):
         """Inicializa o esquema criptográfico."""
         self.BLOCK_SIZE = None  # Tamanho do bloco em bits
-        self.NUM_ROUNDS = 12  # Número de rodadas de transformação
+        self.NUM_ROUNDS = 2  # Número de rodadas de transformação
         self.pboxes = None
         
     # ==================== Funções Auxiliares ====================
